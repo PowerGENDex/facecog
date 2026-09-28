@@ -2,9 +2,7 @@ import './style.css';
 import * as face from './face.js';
 import * as store from './store.js';
 
-const ENROLL_SAMPLES = 5;
-const ENROLL_INTERVAL_MS = 300;
-const ENROLL_TIMEOUT_MS = 20000;
+const ENROLL_TIMEOUT_MS = 60000;
 const MAX_SAMPLES_PER_PERSON = 30;
 const LOG_GAP_MS = 30000; // log a person again only after this long out of view
 const LOG_LIMIT = 200;
@@ -16,7 +14,7 @@ const state = {
   settings: store.loadSettings(),
   modelsReady: false,
   matcher: null,
-  camera: { stream: null, running: false, loopId: 0, mirror: true },
+  camera: { stream: null, running: false, loopId: 0, mirror: true, facing: undefined },
   enroll: null,
   log: [],
   lastSeen: new Map(),
@@ -36,17 +34,34 @@ const els = {
   camOverlay: $('#cam-overlay'),
   camPlaceholder: $('#cam-placeholder'),
   cameraPanel: $('#tab-camera'),
-  cameraPanel: $('#tab-camera'),
   btnCamera: $('#btn-camera'),
-  btnFullscreen: $('#btn-fullscreen'),
-  btnExitFullscreen: $('#btn-exit-fullscreen'),
+  btnCameraStart: $('#btn-camera-start'),
   cameraSelect: $('#camera-select'),
   cameraMsg: $('#camera-msg'),
   fps: $('#fps'),
-  enrollForm: $('#enroll-form'),
+  camControls: $('#cam-controls'),
+  btnFlip: $('#btn-flip'),
+  btnAdd: $('#btn-add'),
+  btnFullscreen: $('#btn-fullscreen'),
+  camToast: $('#cam-toast'),
+  guide: $('#guide'),
+  guideProgress: $('#guide-progress'),
+  guideSteps: $('#guide-steps'),
+  guideName: $('#guide-name'),
+  guidePrompt: $('#guide-prompt'),
+  guideHint: $('#guide-hint'),
+  guideCancel: $('#guide-cancel'),
+  enrollSheet: $('#enroll-sheet'),
+  enrollSheetCancel: $('#enroll-sheet-cancel'),
   enrollName: $('#enroll-name'),
+  peopleNames: $('#people-names'),
+  enrollDone: $('#enroll-done'),
+  doneThumb: $('#done-thumb'),
+  doneTitle: $('#done-title'),
+  doneText: $('#done-text'),
+  doneOk: $('#done-ok'),
+  doneAgain: $('#done-again'),
   btnEnroll: $('#btn-enroll'),
-  enrollProgress: $('#enroll-progress'),
   enrollMsg: $('#enroll-msg'),
   log: $('#log'),
   logEmpty: $('#log-empty'),
@@ -153,6 +168,7 @@ function renderPeople() {
   els.btnExport.disabled = state.people.length === 0;
   els.btnClearAll.disabled = state.people.length === 0;
   const sorted = [...state.people].sort((a, b) => a.name.localeCompare(b.name, 'id'));
+  els.peopleNames.replaceChildren(...sorted.map((p) => el('option', { value: p.name })));
   els.people.replaceChildren(
     ...sorted.map((p) =>
       el('li', { className: 'person' }, [
@@ -267,7 +283,6 @@ function drawDetections(canvas, results, { mirror = false, labeler } = {}) {
 
 const COLOR_KNOWN = '#22c55e';
 const COLOR_UNKNOWN = '#f59e0b';
-const COLOR_ENROLL = '#38bdf8';
 
 function recognitionLabel(r, prefix = '') {
   const person = r.id && personById(r.id);
@@ -295,73 +310,86 @@ function cameraError(err) {
   }
 }
 
-async function startCamera(deviceId) {
-  stopCamera();
+const videoInputs = async () =>
+  (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === 'videoinput');
+
+/** Starts (or switches) the camera. `deviceId` picks a device; `facing` is 'user' | 'environment'. */
+async function startCamera({ deviceId, facing = 'user' } = {}) {
+  releaseStream();
   setMsg(els.cameraMsg, '');
-  els.btnCamera.disabled = true;
+  els.btnCamera.disabled = els.btnCameraStart.disabled = true;
   try {
-    const video = deviceId
-      ? { deviceId: { exact: deviceId }, width: { ideal: 1280 }, height: { ideal: 720 } }
-      : { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } };
+    const size = { width: { ideal: 1280 }, height: { ideal: 720 } };
+    const video = deviceId ? { deviceId: { exact: deviceId }, ...size } : { facingMode: { ideal: facing }, ...size };
     const stream = await navigator.mediaDevices.getUserMedia({ video, audio: false });
     state.camera.stream = stream;
     els.video.srcObject = stream;
     await els.video.play();
 
-    const track = stream.getVideoTracks()[0];
-    state.camera.mirror = track.getSettings().facingMode !== 'environment';
+    const settings = stream.getVideoTracks()[0].getSettings();
+    state.camera.facing = settings.facingMode;
+    state.camera.mirror = settings.facingMode !== 'environment';
     els.video.classList.toggle('is-mirrored', state.camera.mirror);
     els.camPlaceholder.hidden = true;
-    els.btnFullscreen.hidden = false;
     els.btnCamera.textContent = 'Matikan kamera';
-    await populateCameraSelect(track.getSettings().deviceId);
+    await populateCameraSelect(settings.deviceId);
 
     state.camera.running = true;
+    updateCameraUi();
     cameraLoop(++state.camera.loopId);
   } catch (err) {
     stopCamera();
     setMsg(els.cameraMsg, cameraError(err), 'error');
   } finally {
-    els.btnCamera.disabled = !state.modelsReady;
-    updateEnrollButton();
+    els.btnCamera.disabled = els.btnCameraStart.disabled = !state.modelsReady;
   }
 }
 
-function stopCamera() {
+/** Stops the stream and detection loop but leaves the UI (fullscreen etc.) alone. */
+function releaseStream() {
   state.camera.running = false;
   state.camera.loopId++;
   state.camera.stream?.getTracks().forEach((t) => t.stop());
   state.camera.stream = null;
+}
+
+function stopCamera() {
+  releaseStream();
   els.video.srcObject = null;
   els.camOverlay.getContext('2d').clearRect(0, 0, els.camOverlay.width, els.camOverlay.height);
   els.camPlaceholder.hidden = false;
   els.camViewport.style.aspectRatio = '';
-  setFullscreen(false);
-  els.btnFullscreen.hidden = true;
   els.btnCamera.textContent = 'Nyalakan kamera';
   els.fps.textContent = '';
-  if (state.enroll) finishEnroll('Pendaftaran dibatalkan karena kamera dimatikan.', 'error');
-  updateEnrollButton();
+  if (state.enroll) endEnroll();
+  els.enrollSheet.hidden = true;
+  els.enrollDone.hidden = true;
+  setFullscreen(false);
+  updateCameraUi();
 }
 
 async function populateCameraSelect(activeId) {
-  const devices = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === 'videoinput');
+  const devices = await videoInputs();
   els.cameraSelect.hidden = devices.length < 2;
+  els.btnFlip.hidden = devices.length < 2;
   els.cameraSelect.replaceChildren(
     ...devices.map((d, i) => el('option', { value: d.deviceId, textContent: d.label || `Kamera ${i + 1}` })),
   );
   if (activeId) els.cameraSelect.value = activeId;
 }
 
+async function flipCamera() {
+  // Phones report facingMode: toggle front/back. Otherwise cycle through devices.
+  if (state.camera.facing) return startCamera({ facing: state.camera.facing === 'user' ? 'environment' : 'user' });
+  const devices = await videoInputs();
+  const i = devices.findIndex((d) => d.deviceId === els.cameraSelect.value);
+  return startCamera({ deviceId: devices[(i + 1) % devices.length]?.deviceId });
+}
+
 async function cameraLoop(loopId) {
   const { video, camOverlay } = els;
   let fps = 0;
   while (state.camera.running && loopId === state.camera.loopId) {
-    // Pause detection while another tab is shown (saves CPU/battery; keeps the photo tab responsive).
-    if (els.cameraPanel.hidden && !state.enroll) {
-      await sleep(250);
-      continue;
-    }
     // Pause detection while another tab is shown (saves CPU/battery; keeps the photo tab responsive).
     if (els.cameraPanel.hidden && !state.enroll) {
       await sleep(250);
@@ -389,9 +417,10 @@ async function cameraLoop(loopId) {
     if (loopId !== state.camera.loopId) break;
 
     const enrolling = Boolean(state.enroll);
-    drawDetections(camOverlay, results, {
+    // While enrolling the oval guide is the feedback, so no boxes are drawn.
+    drawDetections(camOverlay, enrolling ? [] : results, {
       mirror: state.camera.mirror,
-      labeler: (r) => (enrolling ? { text: 'Mendaftarkan…', color: COLOR_ENROLL } : recognitionLabel(r)),
+      labeler: (r) => recognitionLabel(r),
     });
     if (enrolling) handleEnrollFrame(results);
     else updateLog(results);
@@ -403,81 +432,222 @@ async function cameraLoop(loopId) {
   }
 }
 
+/** Shows/hides the overlay controls to match the current camera/enrollment state. */
+function updateCameraUi() {
+  const busy = Boolean(state.enroll) || !els.enrollSheet.hidden || !els.enrollDone.hidden;
+  els.camControls.hidden = !state.camera.running || busy;
+  els.guide.hidden = !state.enroll;
+  els.btnEnroll.disabled = !state.modelsReady || busy;
+}
+
+let toastTimer;
+function showToast(text) {
+  els.camToast.textContent = text;
+  els.camToast.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => (els.camToast.hidden = true), 4000);
+}
+
 els.btnCamera.addEventListener('click', () => (state.camera.running ? stopCamera() : startCamera()));
+els.btnCameraStart.addEventListener('click', () => startCamera());
+els.cameraSelect.addEventListener('change', () => startCamera({ deviceId: els.cameraSelect.value }));
+els.btnFlip.addEventListener('click', flipCamera);
 
 /* Fullscreen: CSS takeover of the viewport, plus the Fullscreen API where
    supported (hides browser chrome on Android; iOS falls back to CSS only). */
+const isFullscreen = () => els.camViewport.classList.contains('is-fullscreen');
+
 function setFullscreen(on) {
-  const active = els.camViewport.classList.contains('is-fullscreen');
-  if (on === active) return;
+  if (on === isFullscreen()) return;
   els.camViewport.classList.toggle('is-fullscreen', on);
   document.body.classList.toggle('no-scroll', on);
-  els.btnExitFullscreen.hidden = !on;
+  els.btnFullscreen.setAttribute('aria-label', on ? 'Keluar layar penuh' : 'Layar penuh');
+  els.btnFullscreen.title = els.btnFullscreen.getAttribute('aria-label');
   if (on) els.camViewport.requestFullscreen?.().catch(() => {});
   else if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
 }
 
-els.btnFullscreen.addEventListener('click', () => setFullscreen(true));
-els.btnExitFullscreen.addEventListener('click', () => setFullscreen(false));
-document.addEventListener('keydown', (e) => e.key === 'Escape' && setFullscreen(false));
+els.btnFullscreen.addEventListener('click', () => setFullscreen(!isFullscreen()));
+document.addEventListener('keydown', (e) => e.key === 'Escape' && !state.enroll && setFullscreen(false));
 document.addEventListener('fullscreenchange', () => {
   if (!document.fullscreenElement) setFullscreen(false);
 });
-els.cameraSelect.addEventListener('change', () => startCamera(els.cameraSelect.value));
 
-/* ---------- enrollment from camera ---------- */
+/* ---------- guided enrollment ---------- */
 
-function updateEnrollButton() {
-  els.btnEnroll.disabled = !state.camera.running || Boolean(state.enroll);
+const YAW_STRAIGHT = 0.08;
+const YAW_TURNED = 0.12;
+const ENROLL_STEPS = [
+  { prompt: 'Lihat lurus ke kamera', check: (yaw) => Math.abs(yaw) < YAW_STRAIGHT },
+  { prompt: 'Toleh sedikit ke kiri', check: (yaw) => Math.abs(yaw) > YAW_TURNED, side: true },
+  // Only require the opposite side of the previous turn, so it works whichever way "left" maps.
+  { prompt: 'Sekarang toleh sedikit ke kanan', check: (yaw, en) => Math.abs(yaw) > YAW_TURNED && Math.sign(yaw) !== en.side },
+  { prompt: 'Kembali lihat lurus', check: (yaw) => Math.abs(yaw) < YAW_STRAIGHT },
+  { prompt: 'Senyum sedikit 🙂', check: () => true },
+];
+const STEP_MIN_MS = 700; // give people time to read each prompt
+const STEP_FALLBACK_MS = 5000; // accept the pose anyway so nobody gets stuck
+
+const isSmallScreen = () => matchMedia('(max-width: 860px)').matches;
+const vibrate = (pattern) => navigator.vibrate?.(pattern);
+
+async function openEnrollSheet() {
+  if (!state.modelsReady) return;
+  els.enrollDone.hidden = true;
+  if (!state.camera.running) {
+    await startCamera();
+    if (!state.camera.running) return;
+  }
+  els.cameraPanel.scrollIntoView?.({ block: 'start', behavior: 'smooth' });
+  els.enrollSheet.hidden = false;
+  updateCameraUi();
+  els.enrollName.focus();
 }
 
-els.enrollForm.addEventListener('submit', (e) => {
-  e.preventDefault();
-  const name = els.enrollName.value.trim();
-  if (!name || !state.camera.running) return;
-  state.enroll = { name, samples: [], thumb: '', lastAt: 0, startedAt: performance.now() };
-  els.enrollProgress.hidden = false;
-  setProgress(0);
-  setMsg(els.enrollMsg, 'Lihat ke kamera…');
-  updateEnrollButton();
-});
+function closeEnrollSheet() {
+  els.enrollSheet.hidden = true;
+  updateCameraUi();
+}
 
-function setProgress(n) {
-  els.enrollProgress.firstElementChild.style.width = `${(n / ENROLL_SAMPLES) * 100}%`;
+function startEnroll(name) {
+  const now = performance.now();
+  state.enroll = {
+    name,
+    samples: [],
+    thumb: '',
+    step: 0,
+    side: 0,
+    stepStartedAt: now,
+    startedAt: now,
+    restoreFullscreen: isFullscreen(),
+  };
+  els.enrollSheet.hidden = true;
+  els.guideName.textContent = name;
+  els.guideSteps.replaceChildren(...ENROLL_STEPS.map(() => el('span')));
+  // On phones, go fullscreen for the guided capture (this runs inside the tap handler).
+  if (isSmallScreen()) setFullscreen(true);
+  renderGuide('wait', 'Mencari wajah…');
+  updateCameraUi();
+  vibrate(20);
+}
+
+function renderGuide(kind, hint = '') {
+  const en = state.enroll;
+  const done = en.samples.length;
+  els.guide.dataset.state = kind;
+  els.guidePrompt.textContent = ENROLL_STEPS[Math.min(en.step, ENROLL_STEPS.length - 1)].prompt;
+  els.guideHint.textContent = hint;
+  els.guideProgress.style.strokeDashoffset = String(100 - (done / ENROLL_STEPS.length) * 100);
+  [...els.guideSteps.children].forEach((dot, i) => (dot.dataset.state = i < done ? 'done' : i === en.step ? 'active' : ''));
+}
+
+function qualityIssue(results, width, height) {
+  if (!results.length) return 'Arahkan wajah ke dalam bingkai';
+  if (results.length > 1) return 'Pastikan hanya satu wajah yang terlihat';
+  const { x, y, width: w, height: h } = results[0].box;
+  const size = w / Math.min(width, height);
+  if (size < 0.2) return 'Dekatkan wajah ke kamera';
+  if (size > 0.85) return 'Terlalu dekat, mundur sedikit';
+  const dx = (x + w / 2) / width - 0.5;
+  const dy = (y + h / 2) / height - 0.5;
+  if (Math.abs(dx) > 0.22 || Math.abs(dy) > 0.25) return 'Posisikan wajah di tengah bingkai';
+  return null;
 }
 
 function handleEnrollFrame(results) {
   const en = state.enroll;
   const now = performance.now();
   if (now - en.startedAt > ENROLL_TIMEOUT_MS) {
-    finishEnroll('Waktu habis. Pastikan wajah terlihat jelas dan cukup cahaya, lalu coba lagi.', 'error');
+    endEnroll();
+    showToast('Waktu habis. Pastikan wajah terlihat jelas dan cukup cahaya, lalu coba lagi.');
     return;
   }
-  if (results.length !== 1) {
-    setMsg(els.enrollMsg, results.length ? 'Terdeteksi lebih dari satu wajah — pastikan hanya Anda di kamera.' : 'Wajah belum terdeteksi…');
+  const issue = qualityIssue(results, els.video.videoWidth, els.video.videoHeight);
+  if (issue) {
+    renderGuide('warn', issue);
     return;
   }
-  if (now - en.lastAt < ENROLL_INTERVAL_MS) return;
-  en.lastAt = now;
-  en.samples.push(results[0].descriptor);
-  if (!en.thumb) en.thumb = face.cropFace(els.video, results[0].box);
-  setProgress(en.samples.length);
-  setMsg(els.enrollMsg, `Mengambil sampel ${en.samples.length}/${ENROLL_SAMPLES}…`);
-  if (en.samples.length < ENROLL_SAMPLES) return;
+  const r = results[0];
+  const step = ENROLL_STEPS[en.step];
+  const elapsed = now - en.stepStartedAt;
+  if (elapsed < STEP_MIN_MS) {
+    renderGuide('ok');
+    return;
+  }
+  if (!step.check(r.yaw, en) && elapsed < STEP_FALLBACK_MS) {
+    renderGuide('ok', 'Pelan-pelan saja…');
+    return;
+  }
 
-  const res = addSamples(en.name, en.samples, en.thumb);
-  if (!res) finishEnroll('Gagal menyimpan: penyimpanan browser penuh.', 'error');
-  else if (res.added) finishEnroll(`"${res.person.name}" berhasil didaftarkan.`, 'ok');
-  else finishEnroll(`Sampel "${res.person.name}" ditambahkan (total ${res.person.descriptors.length}).`, 'ok');
-  if (res) els.enrollName.value = '';
+  en.samples.push(r.descriptor);
+  if (!en.thumb) en.thumb = face.cropFace(els.video, r.box);
+  if (step.side) en.side = Math.sign(r.yaw);
+  en.step++;
+  en.stepStartedAt = now;
+  vibrate(25);
+
+  if (en.step < ENROLL_STEPS.length) {
+    renderGuide('ok', '✓ Bagus!');
+    return;
+  }
+  renderGuide('ok');
+  completeEnroll();
 }
 
-function finishEnroll(message, kind) {
+function completeEnroll() {
+  const { name, samples, thumb, restoreFullscreen } = state.enroll;
+  const res = addSamples(name, samples, thumb);
+  endEnroll({ keepFullscreen: true });
+  if (!res) {
+    if (!restoreFullscreen) setFullscreen(false);
+    showToast('Gagal menyimpan: penyimpanan browser penuh.');
+    return;
+  }
+  vibrate([40, 60, 40]);
+  els.enrollDone.dataset.restoreFullscreen = String(restoreFullscreen);
+  els.doneThumb.src = res.person.thumb || thumb;
+  els.doneTitle.textContent = res.added ? 'Berhasil didaftarkan!' : 'Sampel ditambahkan!';
+  els.doneText.textContent = res.added
+    ? `Wajah "${res.person.name}" sekarang akan dikenali.`
+    : `"${res.person.name}" sekarang punya ${res.person.descriptors.length} sampel wajah.`;
+  els.enrollDone.hidden = false;
+  els.enrollName.value = '';
+  setMsg(els.enrollMsg, res.added ? `"${res.person.name}" berhasil didaftarkan.` : `Sampel "${res.person.name}" ditambahkan.`, 'ok');
+  updateCameraUi();
+}
+
+/** Leaves enrollment mode; restores the fullscreen state from before it started. */
+function endEnroll({ keepFullscreen = false } = {}) {
+  const restore = state.enroll?.restoreFullscreen;
   state.enroll = null;
-  els.enrollProgress.hidden = true;
-  setMsg(els.enrollMsg, message, kind);
-  updateEnrollButton();
+  if (!keepFullscreen && !restore) setFullscreen(false);
+  updateCameraUi();
 }
+
+function closeDone({ again = false } = {}) {
+  els.enrollDone.hidden = true;
+  if (again) {
+    openEnrollSheet();
+    return;
+  }
+  if (els.enrollDone.dataset.restoreFullscreen !== 'true') setFullscreen(false);
+  updateCameraUi();
+}
+
+els.btnAdd.addEventListener('click', openEnrollSheet);
+els.btnEnroll.addEventListener('click', openEnrollSheet);
+els.enrollSheetCancel.addEventListener('click', closeEnrollSheet);
+els.enrollSheet.addEventListener('submit', (e) => {
+  e.preventDefault();
+  const name = els.enrollName.value.trim();
+  if (name && state.camera.running) startEnroll(name);
+});
+els.guideCancel.addEventListener('click', () => {
+  endEnroll();
+  showToast('Pendaftaran dibatalkan.');
+});
+els.doneOk.addEventListener('click', () => closeDone());
+els.doneAgain.addEventListener('click', () => closeDone({ again: true }));
 
 /* ---------- recognition log ---------- */
 
@@ -696,7 +866,9 @@ async function boot() {
     els.status.dataset.state = 'ready';
     els.status.textContent = `Siap · ${backend.toUpperCase()}`;
     els.btnCamera.disabled = false;
+    els.btnCameraStart.disabled = false;
     els.photoInput.disabled = false;
+    updateCameraUi();
   } catch (err) {
     console.error(err);
     els.status.dataset.state = 'error';

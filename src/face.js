@@ -21,8 +21,20 @@ function detectorOptions(detector, inputSize) {
 }
 
 /**
+ * Rough head yaw from the 68-point landmarks: horizontal offset of the nose tip
+ * from the midpoint between the outer eye corners, relative to eye distance.
+ * ~0 when looking straight at the camera; the sign flips with turn direction.
+ */
+function estimateYaw(landmarks) {
+  const p = landmarks.positions;
+  const [left, right, nose] = [p[36], p[45], p[30]];
+  const eyeDist = Math.hypot(right.x - left.x, right.y - left.y) || 1;
+  return (nose.x - (left.x + right.x) / 2) / eyeDist;
+}
+
+/**
  * Detects every face in `input` and computes its 128-d descriptor.
- * @returns {Promise<Array<{box: {x:number,y:number,width:number,height:number}, score:number, descriptor: Float32Array}>>}
+ * @returns {Promise<Array<{box: {x:number,y:number,width:number,height:number}, score:number, yaw:number, descriptor: Float32Array}>>}
  */
 export async function detectFaces(input, detector = 'tiny', { inputSize = 416 } = {}) {
   const results = await faceapi
@@ -32,6 +44,7 @@ export async function detectFaces(input, detector = 'tiny', { inputSize = 416 } 
   return results.map((r) => ({
     box: r.detection.box,
     score: r.detection.score,
+    yaw: estimateYaw(r.landmarks),
     descriptor: r.descriptor,
   }));
 }

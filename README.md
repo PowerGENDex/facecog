@@ -10,7 +10,8 @@ Dibangun dengan [face-api](https://github.com/vladmandic/face-api) (TensorFlow.j
 ## Fitur
 
 - **Kamera real-time** — deteksi & kenali banyak wajah sekaligus, lengkap dengan nama dan persentase kemiripan.
-- **Pendaftaran wajah** — ambil 5 sampel otomatis dari kamera; nama yang sudah ada akan ditambah sampelnya supaya makin akurat.
+- **Pendaftaran wajah terpandu** — bingkai oval dan petunjuk langkah demi langkah (lihat lurus, toleh kiri/kanan) langsung di atas video, lengkap dengan cincin progres dan getaran di HP. Nama yang sudah ada akan ditambah sampelnya supaya makin akurat.
+- **Ramah HP** — mode layar penuh, tombol ganti kamera depan/belakang, dan tombol besar yang mudah dijangkau jempol.
 - **Analisis foto** — unggah/seret foto, semua wajah ditandai dan bisa langsung didaftarkan dari foto.
 - **Riwayat terdeteksi** — catatan siapa terlihat dan kapan (cocok untuk absensi sederhana), bisa diunduh sebagai CSV.
 - **Database wajah** — ubah nama, hapus, serta ekspor/impor ke file JSON untuk backup atau pindah perangkat.
@@ -56,9 +57,10 @@ kamera juga jalan di HP.
 
 ## Cara pakai
 
-1. **Daftarkan wajah** — di tab *Kamera*, pastikan hanya satu wajah terlihat, isi nama, klik **Daftarkan**.
-   Gerakkan kepala sedikit selama pengambilan sampel. Ulangi dengan nama yang sama untuk menambah sampel
-   (mis. dengan/tanpa kacamata, pencahayaan berbeda).
+1. **Daftarkan wajah** — di tab *Kamera*, tekan tombol **+ Daftarkan wajah** di atas video, tulis nama,
+   lalu tekan **Mulai**. Ikuti petunjuk di layar: posisikan wajah di dalam bingkai oval, lihat lurus,
+   toleh sedikit ke kiri & kanan. Di HP, mode ini otomatis layar penuh. Ulangi dengan nama yang sama untuk
+   menambah sampel (mis. dengan/tanpa kacamata, pencahayaan berbeda).
 2. **Kenali** — wajah terdaftar diberi kotak hijau dengan nama; wajah lain kotak oranye "Tidak dikenal".
 3. **Dari foto** — di tab *Foto*, pilih gambar. Setiap wajah bisa didaftarkan atau ditambah sampelnya langsung dari daftar di samping.
 4. **Backup** — di tab *Database*, klik **Ekspor** untuk menyimpan data wajah ke file JSON; **Impor** untuk memulihkannya.
