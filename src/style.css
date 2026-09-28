@@ -274,6 +274,11 @@ main {
   padding: 0 1.25rem 2rem;
 }
 
+.footer a {
+  color: var(--primary);
+  font-weight: 600;
+}
+
 /* ---------- controls ---------- */
 
 input[type='text'],

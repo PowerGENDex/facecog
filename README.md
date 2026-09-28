@@ -17,6 +17,12 @@ Dibangun dengan [face-api](https://github.com/vladmandic/face-api) (TensorFlow.j
 - **Database wajah** — ubah nama, hapus, serta ekspor/impor ke file JSON untuk backup atau pindah perangkat.
 - **Pengaturan** — pilih detektor *Cepat* (Tiny Face Detector) atau *Akurat* (SSD MobileNet) dan atur ambang kecocokan.
 
+## Demo login passkey & absensi
+
+Folder [`svelte-demo/`](svelte-demo/README.md) berisi demo SvelteKit: **login tanpa password dengan passkey**
+(Face ID / sidik jari) dan **absensi wajah** dengan tantangan acak anti-foto + GPS. Versi online-nya ada di
+`https://<username>.github.io/facecog/demo/`.
+
 ## Menjalankan
 
 Butuh Node.js 20+.

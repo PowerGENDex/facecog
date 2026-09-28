@@ -1,0 +1,32 @@
+{
+	"name": "maca-beungeut-absensi",
+	"private": true,
+	"version": "0.0.1",
+	"type": "module",
+	"scripts": {
+		"models": "node scripts/copy-models.mjs",
+		"predev": "npm run models",
+		"dev": "vite dev",
+		"prebuild": "npm run models",
+		"build": "vite build",
+		"preview": "vite preview",
+		"prepare": "svelte-kit sync || echo ''",
+		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+		"test": "node --test src/lib/face/liveness.test.ts src/lib/backend/attendance.test.ts"
+	},
+	"devDependencies": {
+		"@sveltejs/adapter-static": "^3.0.10",
+		"@sveltejs/kit": "^2.63.0",
+		"@sveltejs/vite-plugin-svelte": "^7.1.2",
+		"@types/node": "^22.20.4",
+		"svelte": "^5.56.1",
+		"svelte-check": "^4.6.0",
+		"typescript": "^6.0.3",
+		"vite": "^8.0.16"
+	},
+	"dependencies": {
+		"@simplewebauthn/browser": "^14.0.0",
+		"@simplewebauthn/server": "^14.0.3",
+		"@vladmandic/face-api": "^1.7.15"
+	}
+}
