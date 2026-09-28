@@ -26,13 +26,20 @@ const state = {
 const els = {
   status: $('#status'),
   peopleCount: $('#people-count'),
+  settings: $('#settings'),
+  settingsSummary: $('#settings-summary'),
   detector: $('#set-detector'),
   threshold: $('#set-threshold'),
   thresholdValue: $('#threshold-value'),
+  camViewport: $('#cam-viewport'),
   video: $('#video'),
   camOverlay: $('#cam-overlay'),
   camPlaceholder: $('#cam-placeholder'),
+  cameraPanel: $('#tab-camera'),
+  cameraPanel: $('#tab-camera'),
   btnCamera: $('#btn-camera'),
+  btnFullscreen: $('#btn-fullscreen'),
+  btnExitFullscreen: $('#btn-exit-fullscreen'),
   cameraSelect: $('#camera-select'),
   cameraMsg: $('#camera-msg'),
   fps: $('#fps'),
@@ -204,7 +211,7 @@ els.btnClearAll.addEventListener('click', () => {
 
 els.btnExport.addEventListener('click', () => {
   const date = new Date().toISOString().slice(0, 10);
-  download(`facecog-${date}.json`, store.exportPeople(state.people), 'application/json');
+  download(`maca-beungeut-${date}.json`, store.exportPeople(state.people), 'application/json');
 });
 
 els.importInput.addEventListener('change', async () => {
@@ -305,6 +312,7 @@ async function startCamera(deviceId) {
     state.camera.mirror = track.getSettings().facingMode !== 'environment';
     els.video.classList.toggle('is-mirrored', state.camera.mirror);
     els.camPlaceholder.hidden = true;
+    els.btnFullscreen.hidden = false;
     els.btnCamera.textContent = 'Matikan kamera';
     await populateCameraSelect(track.getSettings().deviceId);
 
@@ -327,6 +335,9 @@ function stopCamera() {
   els.video.srcObject = null;
   els.camOverlay.getContext('2d').clearRect(0, 0, els.camOverlay.width, els.camOverlay.height);
   els.camPlaceholder.hidden = false;
+  els.camViewport.style.aspectRatio = '';
+  setFullscreen(false);
+  els.btnFullscreen.hidden = true;
   els.btnCamera.textContent = 'Nyalakan kamera';
   els.fps.textContent = '';
   if (state.enroll) finishEnroll('Pendaftaran dibatalkan karena kamera dimatikan.', 'error');
@@ -346,6 +357,16 @@ async function cameraLoop(loopId) {
   const { video, camOverlay } = els;
   let fps = 0;
   while (state.camera.running && loopId === state.camera.loopId) {
+    // Pause detection while another tab is shown (saves CPU/battery; keeps the photo tab responsive).
+    if (els.cameraPanel.hidden && !state.enroll) {
+      await sleep(250);
+      continue;
+    }
+    // Pause detection while another tab is shown (saves CPU/battery; keeps the photo tab responsive).
+    if (els.cameraPanel.hidden && !state.enroll) {
+      await sleep(250);
+      continue;
+    }
     if (video.readyState < 2 || !video.videoWidth) {
       await nextFrame();
       continue;
@@ -353,6 +374,8 @@ async function cameraLoop(loopId) {
     if (camOverlay.width !== video.videoWidth || camOverlay.height !== video.videoHeight) {
       camOverlay.width = video.videoWidth;
       camOverlay.height = video.videoHeight;
+      // Follow the stream's real shape (portrait on phones) instead of a fixed 16:9 box.
+      els.camViewport.style.aspectRatio = `${video.videoWidth} / ${video.videoHeight}`;
     }
     const t0 = performance.now();
     let results;
@@ -381,6 +404,25 @@ async function cameraLoop(loopId) {
 }
 
 els.btnCamera.addEventListener('click', () => (state.camera.running ? stopCamera() : startCamera()));
+
+/* Fullscreen: CSS takeover of the viewport, plus the Fullscreen API where
+   supported (hides browser chrome on Android; iOS falls back to CSS only). */
+function setFullscreen(on) {
+  const active = els.camViewport.classList.contains('is-fullscreen');
+  if (on === active) return;
+  els.camViewport.classList.toggle('is-fullscreen', on);
+  document.body.classList.toggle('no-scroll', on);
+  els.btnExitFullscreen.hidden = !on;
+  if (on) els.camViewport.requestFullscreen?.().catch(() => {});
+  else if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+}
+
+els.btnFullscreen.addEventListener('click', () => setFullscreen(true));
+els.btnExitFullscreen.addEventListener('click', () => setFullscreen(false));
+document.addEventListener('keydown', (e) => e.key === 'Escape' && setFullscreen(false));
+document.addEventListener('fullscreenchange', () => {
+  if (!document.fullscreenElement) setFullscreen(false);
+});
 els.cameraSelect.addEventListener('change', () => startCamera(els.cameraSelect.value));
 
 /* ---------- enrollment from camera ---------- */
@@ -484,7 +526,7 @@ els.btnLogCsv.addEventListener('click', () => {
     state.log.map((e) => [e.name, new Date(e.time).toISOString(), e.similarity]),
   );
   const csv = rows.map((row) => row.map(csvCell).join(',')).join('\r\n');
-  download(`facecog-riwayat-${new Date().toISOString().slice(0, 10)}.csv`, `﻿${csv}`, 'text/csv');
+  download(`maca-beungeut-riwayat-${new Date().toISOString().slice(0, 10)}.csv`, `﻿${csv}`, 'text/csv');
 });
 
 els.btnLogClear.addEventListener('click', () => {
@@ -612,15 +654,23 @@ document.querySelectorAll('.tab').forEach((tab) =>
   }),
 );
 
+function updateSettingsSummary() {
+  const detector = state.settings.detector === 'ssd' ? 'Akurat' : 'Cepat';
+  els.settingsSummary.textContent = `· ${detector} · ambang ${state.settings.threshold.toFixed(2)}`;
+}
+
 function applySettings() {
   els.detector.value = state.settings.detector;
   els.threshold.value = String(state.settings.threshold);
   els.thresholdValue.textContent = state.settings.threshold.toFixed(2);
+  els.settings.open = matchMedia('(min-width: 861px)').matches;
+  updateSettingsSummary();
 }
 
 els.detector.addEventListener('change', () => {
   state.settings.detector = els.detector.value;
   store.saveSettings(state.settings);
+  updateSettingsSummary();
   if (state.modelsReady) detectPhoto();
 });
 
@@ -629,6 +679,7 @@ els.threshold.addEventListener('input', () => {
   els.thresholdValue.textContent = state.settings.threshold.toFixed(2);
   state.matcher = face.createMatcher(state.people, state.settings.threshold);
   store.saveSettings(state.settings);
+  updateSettingsSummary();
   refreshPhotoMatches();
 });
 

@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="color-scheme" content="light dark" />
-    <title>FaceCog — Face Recognition</title>
+    <title>Maca Beungeut — Face Recognition</title>
     <link
       rel="icon"
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2322c55e' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2'/%3E%3Ccircle cx='12' cy='11' r='4'/%3E%3C/svg%3E"
@@ -17,7 +17,7 @@
           <path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2" />
           <circle cx="12" cy="11" r="4" />
         </svg>
-        FaceCog
+        Maca Beungeut
       </div>
       <div id="status" class="status" data-state="loading">Memuat model…</div>
     </header>
@@ -30,20 +30,23 @@
       </button>
     </nav>
 
-    <section class="settings" aria-label="Pengaturan">
-      <label class="field">
-        <span>Detektor</span>
-        <select id="set-detector">
-          <option value="tiny">Cepat (Tiny Face Detector)</option>
-          <option value="ssd">Akurat (SSD MobileNet)</option>
-        </select>
-      </label>
-      <label class="field field--grow">
-        <span>Ambang kecocokan <output id="threshold-value">0.50</output></span>
-        <input id="set-threshold" type="range" min="0.3" max="0.7" step="0.01" value="0.5" />
-        <small class="muted">Lebih kecil = lebih ketat (lebih sedikit salah kenal, tapi lebih sering "tidak dikenal").</small>
-      </label>
-    </section>
+    <details class="settings" id="settings">
+      <summary>Pengaturan <span id="settings-summary" class="muted"></span></summary>
+      <div class="settings__body">
+        <label class="field">
+          <span>Detektor</span>
+          <select id="set-detector">
+            <option value="tiny">Cepat (Tiny Face Detector)</option>
+            <option value="ssd">Akurat (SSD MobileNet)</option>
+          </select>
+        </label>
+        <label class="field field--grow">
+          <span>Ambang kecocokan <output id="threshold-value">0.50</output></span>
+          <input id="set-threshold" type="range" min="0.3" max="0.7" step="0.01" value="0.5" />
+          <small class="muted">Lebih kecil = lebih ketat (lebih sedikit salah kenal, tapi lebih sering "tidak dikenal").</small>
+        </label>
+      </div>
+    </details>
 
     <main>
       <!-- Kamera -->
@@ -57,9 +60,13 @@
                 <p>Kamera belum aktif</p>
                 <p class="muted">Klik "Nyalakan kamera" untuk mulai mengenali wajah secara real-time.</p>
               </div>
+              <button id="btn-exit-fullscreen" class="viewport__close" type="button" aria-label="Keluar layar penuh" hidden>
+                &times;
+              </button>
             </div>
             <div class="toolbar">
               <button id="btn-camera" class="btn btn--primary" disabled>Nyalakan kamera</button>
+              <button id="btn-fullscreen" class="btn btn--ghost" type="button" hidden>Layar penuh</button>
               <select id="camera-select" aria-label="Pilih kamera" hidden></select>
               <span id="fps" class="muted"></span>
             </div>

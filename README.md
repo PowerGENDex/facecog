@@ -1,4 +1,4 @@
-# FaceCog — Face Recognition di Browser
+# Maca Beungeut — Face Recognition di Browser
 
 Aplikasi pengenalan wajah (face recognition) yang berjalan **sepenuhnya di browser**.
 Daftarkan wajah seseorang, lalu aplikasi akan mengenalinya secara real-time lewat

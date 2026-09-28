@@ -163,12 +163,31 @@ p {
 }
 
 .settings {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 1rem 2rem;
   max-width: 1200px;
   margin: 1rem auto 0;
   padding: 0 1.25rem;
+}
+
+.settings summary {
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.875rem;
+  width: fit-content;
+}
+
+.settings summary .muted {
+  font-weight: 400;
+}
+
+.settings[open] summary .muted {
+  display: none;
+}
+
+.settings__body {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem 2rem;
+  margin-top: 0.75rem;
 }
 
 .field {
@@ -362,6 +381,52 @@ input[type='range'] {
   overflow: hidden;
   background: #000;
   aspect-ratio: 16 / 9;
+  max-height: 75vh;
+  max-height: 75dvh;
+}
+
+@media (max-width: 860px) {
+  .viewport {
+    aspect-ratio: 3 / 4;
+  }
+}
+
+.viewport.is-fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
+  max-height: none;
+  aspect-ratio: auto !important;
+  border-radius: 0;
+}
+
+/* Fill the whole screen; the overlay uses the same fit so boxes stay aligned. */
+.viewport.is-fullscreen video,
+.viewport.is-fullscreen canvas {
+  object-fit: cover;
+}
+
+.viewport__close {
+  position: absolute;
+  top: max(0.75rem, env(safe-area-inset-top));
+  right: max(0.75rem, env(safe-area-inset-right));
+  z-index: 1;
+  width: 2.75rem;
+  height: 2.75rem;
+  border: 0;
+  border-radius: 50%;
+  background: rgb(0 0 0 / 0.55);
+  color: #fff;
+  font-size: 1.75rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+body.no-scroll {
+  overflow: hidden;
 }
 
 .viewport video,
