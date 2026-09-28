@@ -34,6 +34,22 @@ npm run build
 npm run preview   # coba hasil build secara lokal
 ```
 
+### Online lewat GitHub Pages
+
+Repo ini punya workflow `.github/workflows/deploy.yml` yang otomatis build & deploy setiap ada push
+ke branch default. Aktifkan sekali saja:
+
+1. Buka **Settings → Pages** di repo GitHub.
+2. Di **Build and deployment → Source**, pilih **GitHub Actions**.
+3. Buka tab **Actions**, pilih run terakhir *Build & Deploy ke GitHub Pages*, klik **Re-run all jobs**
+   (atau push commit baru).
+
+Setelah selesai, aplikasi bisa dibuka di `https://<username>.github.io/facecog/` — sudah HTTPS, jadi
+kamera juga jalan di HP.
+
+> GitHub Pages untuk repo **private** butuh akun GitHub Pro/Team. Di akun gratis, repo harus dijadikan
+> public dulu (Settings → General → Danger Zone → Change visibility). Situs Pages selalu bisa diakses publik.
+
 > **Catatan:** browser hanya mengizinkan kamera di `https://` atau `http://localhost`.
 > Untuk mencoba dari HP di jaringan yang sama, host hasil build di layanan ber-HTTPS
 > atau gunakan tunnel HTTPS. Tab **Foto** tetap bisa dipakai tanpa HTTPS.
